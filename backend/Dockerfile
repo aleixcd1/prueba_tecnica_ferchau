@@ -1,5 +1,6 @@
 FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /workspace
+COPY .mvn/settings.xml /root/.m2/settings.xml
 COPY pom.xml .
 RUN mvn -B dependency:go-offline
 COPY src ./src
