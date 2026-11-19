@@ -1,0 +1,112 @@
+<main class="page">
+  <header class="page-header">
+    <h1>El tiempo en España</h1>
+    <p>Consulta la predicción meteorológica para mañana en cualquier municipio.</p>
+  </header>
+
+  <section class="search-panel" aria-labelledby="search-title">
+    <h2 id="search-title">Busca tu municipio</h2>
+    <div class="form-grid">
+      <div class="field municipality-field">
+        <label for="municipality">Municipio</label>
+        <input
+          #municipalityInput
+          id="municipality"
+          type="search"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="municipality-options"
+          [attr.aria-expanded]="suggestions().length > 0"
+          [attr.aria-activedescendant]="
+            suggestions().length > 0 ? 'municipality-option-' + activeOptionIndex() : null
+          "
+          autocomplete="off"
+          placeholder="Escribe al menos dos letras"
+          [value]="query()"
+          (input)="onMunicipalityInput(municipalityInput.value)"
+          (keydown)="onMunicipalityKeydown($event)"
+        />
+        @if (searching()) {
+          <span class="field-hint" role="status">Buscando municipios…</span>
+        }
+        @if (suggestions().length > 0) {
+          <ul id="municipality-options" class="suggestions" role="listbox" aria-label="Municipios">
+            @for (municipality of suggestions(); track municipality.id; let index = $index) {
+              <li>
+                <button
+                  [id]="'municipality-option-' + index"
+                  type="button"
+                  role="option"
+                  [attr.aria-selected]="activeOptionIndex() === index"
+                  (mouseenter)="activeOptionIndex.set(index)"
+                  (click)="selectMunicipality(municipality)"
+                >
+                  {{ municipality.nombre }}
+                  @if (municipality.provincia) {
+                    <span>, {{ municipality.provincia }}</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        } @else if (query().trim().length >= 2 && !searching() && !searchError()) {
+          <span class="field-hint" role="status">No se encontraron municipios.</span>
+        }
+      </div>
+
+      <div class="field">
+        <label for="temperature-unit">Unidad de temperatura (opcional)</label>
+        <select id="temperature-unit" [value]="selectedUnit()" (change)="onUnitChange($event)">
+          <option value="">Por defecto (°C)</option>
+          <option value="G_CEL">Grados Celsius (°C)</option>
+          <option value="G_FAH">Grados Fahrenheit (°F)</option>
+        </select>
+      </div>
+    </div>
+
+    @if (searchError()) {
+      <p class="error-message" role="alert">{{ searchError() }}</p>
+    }
+  </section>
+
+  @if (selectedMunicipality()) {
+    <section class="forecast-panel" aria-labelledby="forecast-title" aria-live="polite">
+      <h2 id="forecast-title">Predicción para mañana en {{ selectedMunicipality()?.nombre }}</h2>
+
+      @if (loadingForecast()) {
+        <p role="status">Cargando predicción…</p>
+      } @else if (forecastError()) {
+        <p class="error-message" role="alert">{{ forecastError() }}</p>
+      } @else if (forecast(); as weather) {
+        <p class="temperature">
+          Temperatura media:
+          <strong
+            >{{ weather.mediaTemperatura }}
+            {{ formatTemperatureUnit(weather.unidadTemperatura) }}</strong
+          >
+        </p>
+        <h3>Probabilidad de precipitación</h3>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Periodo</th>
+                <th scope="col">Probabilidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (period of weather.probPrecipitacion; track period.periodo) {
+                <tr>
+                  <td>{{ period.periodo }}</td>
+                  <td>
+                    {{ period.probabilidad === null ? 'No disponible' : period.probabilidad + '%' }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</main>

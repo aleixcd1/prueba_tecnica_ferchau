@@ -1,0 +1,13 @@
+.env
+Prueba_desarrollador_FS.pdf
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+backend/target/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/playwright-report/
+frontend/test-results/
+frontend/coverage/
