@@ -2,9 +2,11 @@ package es.ferchau.weather.infrastructure.aemet;
 
 import es.ferchau.weather.domain.model.Municipality;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -14,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class AemetOpenDataAdapterTest {
     private static final String BASE_URL = "https://opendata.aemet.es/opendata";
@@ -22,8 +25,7 @@ class AemetOpenDataAdapterTest {
     void followsAemetDataUrlAndMapsTheMunicipalityCatalogue() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        AemetOpenDataAdapter adapter = new AemetOpenDataAdapter(
-                builder.baseUrl(BASE_URL).build(), "test-key", BASE_URL);
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
         server.expect(requestTo(BASE_URL + "/api/maestro/municipios?api_key=test-key"))
                 .andRespond(withSuccess(
                         "{\"estado\":200,\"datos\":\"" + BASE_URL + "/data/municipalities\"}",
@@ -31,7 +33,7 @@ class AemetOpenDataAdapterTest {
         server.expect(requestTo(BASE_URL + "/data/municipalities"))
                 .andRespond(withSuccess(
                         "[{\"id\":\"id28079\",\"nombre\":\"Madrid\",\"provincia\":\"Madrid\"}]",
-                        MediaType.APPLICATION_JSON));
+                        MediaType.TEXT_PLAIN));
 
         assertThat(adapter.findAll()).containsExactly(new Municipality("28079", "Madrid", "Madrid"));
         server.verify();
@@ -41,8 +43,7 @@ class AemetOpenDataAdapterTest {
     void mapsTheRequestedDayAndAggregatesPrecipitationIntoSixHourPeriods() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        AemetOpenDataAdapter adapter = new AemetOpenDataAdapter(
-                builder.baseUrl(BASE_URL).build(), "test-key", BASE_URL);
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
         LocalDate forecastDate = LocalDate.of(2026, 11, 20);
         server.expect(requestTo(BASE_URL
                         + "/api/prediccion/especifica/municipio/diaria/28079?api_key=test-key"))
@@ -55,7 +56,10 @@ class AemetOpenDataAdapterTest {
                           "prediccion": {
                             "dia": [{
                               "fecha": "2026-11-20T00:00:00",
-                              "temperatura": [{"value": 10}, {"value": 20}],
+                              "temperatura": {
+                                "dato": [{"value": 10}, {"value": 20}],
+                                "unidad": "ºC"
+                              },
                               "probPrecipitacion": [
                                 {"value": 20, "periodo": "00-12"},
                                 {"value": 40, "periodo": "12-24"}
@@ -63,7 +67,7 @@ class AemetOpenDataAdapterTest {
                             }]
                           }
                         }]
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.TEXT_PLAIN));
 
         var forecast = adapter.findForecast("28079", forecastDate);
 
@@ -81,8 +85,7 @@ class AemetOpenDataAdapterTest {
     void rejectsDataUrlsOnAnotherHost() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        AemetOpenDataAdapter adapter = new AemetOpenDataAdapter(
-                builder.baseUrl(BASE_URL).build(), "test-key", BASE_URL);
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
         server.expect(requestTo(BASE_URL + "/api/maestro/municipios?api_key=test-key"))
                 .andRespond(withSuccess(
                         "{\"estado\":200,\"datos\":\"https://example.org/untrusted\"}",
@@ -92,5 +95,23 @@ class AemetOpenDataAdapterTest {
                 .isInstanceOf(AemetGatewayException.class)
                 .hasMessageContaining("URL de datos no válida");
         server.verify();
+    }
+
+    @Test
+    void reportsRateLimitingSeparatelyFromMissingCredentials() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
+        server.expect(requestTo(BASE_URL + "/api/maestro/municipios?api_key=test-key"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        assertThatThrownBy(adapter::findAll)
+                .isInstanceOf(AemetGatewayException.class)
+                .hasMessage("AEMET ha limitado temporalmente las solicitudes. Inténtalo más tarde.");
+        server.verify();
+    }
+
+    private AemetOpenDataAdapter createAdapter(RestClient restClient) {
+        return new AemetOpenDataAdapter(restClient, JsonMapper.builder().build(), "test-key", BASE_URL);
     }
 }

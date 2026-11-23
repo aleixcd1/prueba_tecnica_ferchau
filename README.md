@@ -28,6 +28,14 @@ Aplicación para buscar municipios españoles y consultar la previsión de tempe
 
 Si no se proporciona la clave, los contenedores arrancan, pero las operaciones que consultan AEMET responden con un error explícito.
 
+Si cambias la clave mientras los contenedores ya están creados, recrea el backend para que Docker Compose aplique la variable de entorno:
+
+```powershell
+docker compose up -d --force-recreate backend
+```
+
+Si una consulta devuelve `429`, AEMET ha limitado temporalmente las solicitudes; espera antes de volver a intentarlo. Un error `502` también puede indicar indisponibilidad temporal del proveedor.
+
 ## API
 
 | Método | Ruta | Descripción |

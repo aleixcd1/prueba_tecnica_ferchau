@@ -10,7 +10,10 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,13 +29,16 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
             List.of("00-06", "06-12", "12-18", "18-24");
 
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
     private final String apiKey;
     private final URI baseUri;
 
     public AemetOpenDataAdapter(RestClient aemetRestClient,
+                                ObjectMapper objectMapper,
                                 @Value("${aemet.api-key:}") String apiKey,
                                 @Value("${aemet.base-url}") String baseUrl) {
         this.restClient = aemetRestClient;
+        this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.baseUri = URI.create(baseUrl);
     }
@@ -84,10 +90,11 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
         }
 
         try {
-            JsonNode response = restClient.get()
+            String responseBody = restClient.get()
                     .uri(uriBuilder -> uriBuilder.path(path).queryParam("api_key", apiKey).build())
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
+            JsonNode response = parseJson(responseBody, "AEMET devolvió una respuesta de metadatos vacía");
             if (response == null || !response.path("estado").canConvertToInt()
                     || response.path("estado").asInt() != 200) {
                 throw new AemetGatewayException("AEMET rechazó la solicitud de datos");
@@ -102,11 +109,15 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
                 throw new AemetGatewayException("AEMET devolvió una URL de datos no válida");
             }
 
-            JsonNode data = restClient.get().uri(resolvedDataUri).retrieve().body(JsonNode.class);
-            if (data == null) {
-                throw new AemetGatewayException("AEMET devolvió una respuesta de datos vacía");
+            String dataBody = restClient.get().uri(resolvedDataUri).retrieve().body(String.class);
+            return parseJson(dataBody, "AEMET devolvió una respuesta de datos vacía");
+        } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 429) {
+                throw new AemetGatewayException(
+                        "AEMET ha limitado temporalmente las solicitudes. Inténtalo más tarde.", exception);
             }
-            return data;
+            throw new AemetGatewayException(
+                    "AEMET respondió con HTTP " + exception.getStatusCode().value(), exception);
         } catch (RestClientException exception) {
             throw new AemetGatewayException("No se pudo consultar la API de AEMET", exception);
         } catch (IllegalArgumentException exception) {
@@ -114,9 +125,24 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
         }
     }
 
+    private JsonNode parseJson(String body, String emptyBodyMessage) {
+        if (body == null || body.isBlank()) {
+            throw new AemetGatewayException(emptyBodyMessage);
+        }
+        try {
+            return objectMapper.readTree(body);
+        } catch (JacksonException exception) {
+            throw new AemetGatewayException("AEMET devolvió un documento JSON no válido", exception);
+        }
+    }
+
     private DailyForecast mapForecast(JsonNode day) {
         List<BigDecimal> temperatures = new ArrayList<>();
-        day.path("temperatura").forEach(item -> number(item.path("value")).ifPresent(temperatures::add));
+        JsonNode temperatureData = day.path("temperatura");
+        if (!temperatureData.isArray()) {
+            temperatureData = temperatureData.path("dato");
+        }
+        temperatureData.forEach(item -> number(item.path("value")).ifPresent(temperatures::add));
         if (temperatures.isEmpty()) {
             throw new AemetGatewayException("AEMET no devolvió temperaturas para el día solicitado");
         }
