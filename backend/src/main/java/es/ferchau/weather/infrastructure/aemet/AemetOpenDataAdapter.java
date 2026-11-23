@@ -95,9 +95,19 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
                     .retrieve()
                     .body(String.class);
             JsonNode response = parseJson(responseBody, "AEMET devolvió una respuesta de metadatos vacía");
-            if (response == null || !response.path("estado").canConvertToInt()
-                    || response.path("estado").asInt() != 200) {
-                throw new AemetGatewayException("AEMET rechazó la solicitud de datos");
+            if (response == null || !response.path("estado").canConvertToInt()) {
+                throw new AemetGatewayException("AEMET devolvió una respuesta de metadatos no válida");
+            }
+            int status = response.path("estado").asInt();
+            if (status == 429) {
+                throw new AemetGatewayException(
+                        "AEMET ha limitado temporalmente las solicitudes. Inténtalo más tarde.");
+            }
+            if (status != 200) {
+                String description = text(response, "descripcion");
+                String detail = description.isBlank() ? "" : ": " + description;
+                throw new AemetGatewayException(
+                        "AEMET rechazó la solicitud de datos (estado " + status + ")" + detail);
             }
 
             String dataUrl = response.path("datos").asText("");
@@ -201,15 +211,15 @@ public class AemetOpenDataAdapter implements MunicipalityCatalog, WeatherForecas
     }
 
     private String municipalityCode(JsonNode municipality) {
-        String oldId = text(municipality, "id_old");
-        if (oldId.matches("\\d{5}")) {
-            return oldId;
-        }
         String id = text(municipality, "id");
         if (id.startsWith("id")) {
             id = id.substring(2);
         }
-        return id.matches("\\d{5}") ? id : "";
+        if (id.matches("\\d{5}")) {
+            return id;
+        }
+        String oldId = text(municipality, "id_old");
+        return oldId.matches("\\d{5}") ? oldId : "";
     }
 
     private String text(JsonNode node, String field) {

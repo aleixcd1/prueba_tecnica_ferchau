@@ -40,6 +40,30 @@ class AemetOpenDataAdapterTest {
     }
 
     @Test
+    void prefersCurrentAemetMunicipalityIdOverLegacyId() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
+        server.expect(requestTo(BASE_URL + "/api/maestro/municipios?api_key=test-key"))
+                .andRespond(withSuccess(
+                        "{\"estado\":200,\"datos\":\"" + BASE_URL + "/data/municipalities\"}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE_URL + "/data/municipalities"))
+                .andRespond(withSuccess("""
+                        [{
+                          "id": "id03122",
+                          "id_old": "03585",
+                          "nombre": "San Vicente del Raspeig/Sant Vicent del Raspeig",
+                          "provincia": "Alicante"
+                        }]
+                        """, MediaType.TEXT_PLAIN));
+
+        assertThat(adapter.findAll()).containsExactly(
+                new Municipality("03122", "San Vicente del Raspeig/Sant Vicent del Raspeig", "Alicante"));
+        server.verify();
+    }
+
+    @Test
     void mapsTheRequestedDayAndAggregatesPrecipitationIntoSixHourPeriods() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -108,6 +132,23 @@ class AemetOpenDataAdapterTest {
         assertThatThrownBy(adapter::findAll)
                 .isInstanceOf(AemetGatewayException.class)
                 .hasMessage("AEMET ha limitado temporalmente las solicitudes. Inténtalo más tarde.");
+        server.verify();
+    }
+
+    @Test
+    void reportsAemetMetadataStatusAndDescriptionWhenTheProviderRejectsARequest() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AemetOpenDataAdapter adapter = createAdapter(builder.baseUrl(BASE_URL).build());
+        server.expect(requestTo(BASE_URL + "/api/maestro/municipios?api_key=test-key"))
+                .andRespond(withSuccess(
+                        "{\"estado\":404,\"descripcion\":\"No hay datos que satisfagan esos criterios\"}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(adapter::findAll)
+                .isInstanceOf(AemetGatewayException.class)
+                .hasMessage("AEMET rechazó la solicitud de datos (estado 404): "
+                        + "No hay datos que satisfagan esos criterios");
         server.verify();
     }
 
