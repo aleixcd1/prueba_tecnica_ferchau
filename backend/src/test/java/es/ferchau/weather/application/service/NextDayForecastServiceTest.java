@@ -11,24 +11,24 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class NextDayForecastServiceTest {
     @Test
     void requestsTheNextSpanishCalendarDayAndConvertsTheTemperature() {
-        AtomicReference<LocalDate> requestedDate = new AtomicReference<>();
-        WeatherForecastProvider provider = (municipalityId, date) -> {
-            requestedDate.set(date);
-            return new DailyForecast(new BigDecimal("20.0"), List.of());
-        };
+        WeatherForecastProvider provider = mock(WeatherForecastProvider.class);
+        when(provider.findForecast("28079", LocalDate.of(2026, 3, 30)))
+                .thenReturn(new DailyForecast(new BigDecimal("20.0"), List.of()));
         Clock clock = Clock.fixed(Instant.parse("2026-03-28T23:30:00Z"), ZoneOffset.UTC);
         NextDayForecastService service = new NextDayForecastService(provider, clock);
 
         var summary = service.getForecast("28079", TemperatureUnit.G_FAH);
 
-        assertThat(requestedDate.get()).isEqualTo(LocalDate.of(2026, 3, 30));
+        verify(provider).findForecast("28079", LocalDate.of(2026, 3, 30));
         assertThat(summary.meanTemperature()).isEqualTo(new BigDecimal("68.0"));
         assertThat(summary.temperatureUnit()).isEqualTo(TemperatureUnit.G_FAH);
     }
