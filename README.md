@@ -133,6 +133,7 @@ Las suites backend están implementadas con JUnit 5; Mockito sustituye las depen
 Ejecutar directamente una imagen publicada requiere adjuntar la clave AEMET al contenedor backend:
 
 ```powershell
-docker run -d --name prueba-ferchau-backend -p 8080:8080 -e AEMET_API_KEY="TU_CLAVE" ghcr.io/aleixcd1/prueba_tecnica_ferchau-backend:latest
-docker run -d --name prueba-ferchau-frontend -p 4200:80 ghcr.io/aleixcd1/prueba_tecnica_ferchau-frontend:latest
+docker network create prueba-ferchau
+docker run -d --name prueba-ferchau-backend --network prueba-ferchau -p 8080:8080 -e AEMET_API_KEY="TU_CLAVE" ghcr.io/aleixcd1/prueba_tecnica_ferchau-backend:latest
+docker run -d --name prueba-ferchau-frontend --network prueba-ferchau -p 4200:80 ghcr.io/aleixcd1/prueba_tecnica_ferchau-frontend:latest
 ```
