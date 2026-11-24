@@ -35,8 +35,9 @@ class NextDayForecastServiceTest {
 
     @Test
     void defaultsToCelsiusWhenTheUnitIsOmitted() {
-        WeatherForecastProvider provider = (municipalityId, date) ->
-                new DailyForecast(new BigDecimal("18.26"), List.of());
+        WeatherForecastProvider provider = mock(WeatherForecastProvider.class);
+        when(provider.findForecast("28079", LocalDate.of(2026, 11, 20)))
+                .thenReturn(new DailyForecast(new BigDecimal("18.26"), List.of()));
         NextDayForecastService service = new NextDayForecastService(
                 provider, Clock.fixed(Instant.parse("2026-11-19T12:00:00Z"), ZoneOffset.UTC));
 

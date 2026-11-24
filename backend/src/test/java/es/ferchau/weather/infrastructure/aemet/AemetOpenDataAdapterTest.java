@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.spy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -153,6 +154,6 @@ class AemetOpenDataAdapterTest {
     }
 
     private AemetOpenDataAdapter createAdapter(RestClient restClient) {
-        return new AemetOpenDataAdapter(restClient, JsonMapper.builder().build(), "test-key", BASE_URL);
+        return spy(new AemetOpenDataAdapter(restClient, JsonMapper.builder().build(), "test-key", BASE_URL));
     }
 }

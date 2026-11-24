@@ -122,3 +122,17 @@ Para desarrollar con el servidor Angular y el proxy local a `http://localhost:80
 ## Integración continua y publicación
 
 La integración continua valida los cambios de la rama principal y las solicitudes de incorporación: ejecuta las pruebas del backend, las pruebas unitarias y e2e del frontend, y comprueba la construcción de ambas imágenes Docker. Al publicar una versión con una etiqueta `v*`, se generan y publican las imágenes del backend y del frontend en GitHub Container Registry con la etiqueta de versión y `latest`.
+
+Las suites backend están implementadas con JUnit 5; Mockito sustituye las dependencias externas en las pruebas unitarias y de integración, y Spring MockRestServiceServer valida las respuestas HTTP del adaptador AEMET.
+
+### Imágenes públicas
+
+- Backend: `ghcr.io/aleixcd1/prueba_tecnica_ferchau-backend:latest`
+- Frontend: `ghcr.io/aleixcd1/prueba_tecnica_ferchau-frontend:latest`
+
+Ejecutar directamente una imagen publicada requiere adjuntar la clave AEMET al contenedor backend:
+
+```powershell
+docker run -d --name prueba-ferchau-backend -p 8080:8080 -e AEMET_API_KEY="TU_CLAVE" ghcr.io/aleixcd1/prueba_tecnica_ferchau-backend:latest
+docker run -d --name prueba-ferchau-frontend -p 4200:80 ghcr.io/aleixcd1/prueba_tecnica_ferchau-frontend:latest
+```

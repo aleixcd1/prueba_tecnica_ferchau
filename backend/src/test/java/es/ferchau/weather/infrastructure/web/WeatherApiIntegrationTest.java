@@ -6,13 +6,11 @@ import es.ferchau.weather.domain.model.PrecipitationProbability;
 import es.ferchau.weather.domain.port.out.MunicipalityCatalog;
 import es.ferchau.weather.domain.port.out.WeatherForecastProvider;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.net.URI;
@@ -24,9 +22,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(WeatherApiIntegrationTest.StubProviders.class)
 class WeatherApiIntegrationTest {
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
 
@@ -35,6 +33,28 @@ class WeatherApiIntegrationTest {
 
     @Value("${local.server.port}")
     private int port;
+
+    @MockitoBean
+    private MunicipalityCatalog municipalityCatalog;
+
+    @MockitoBean
+    private WeatherForecastProvider weatherForecastProvider;
+
+    @BeforeEach
+    void configureMocks() {
+        when(municipalityCatalog.findAll()).thenReturn(List.of(
+                new Municipality("28079", "Madrid", "Madrid")));
+        when(weatherForecastProvider.findForecast(
+                org.mockito.ArgumentMatchers.eq("28079"),
+                org.mockito.ArgumentMatchers.any(java.time.LocalDate.class)))
+                .thenReturn(new DailyForecast(
+                        new BigDecimal("20.0"),
+                        List.of(
+                                new PrecipitationProbability(5, "00-06"),
+                                new PrecipitationProbability(10, "06-12"),
+                                new PrecipitationProbability(10, "12-18"),
+                                new PrecipitationProbability(5, "18-24"))));
+    }
 
     @Test
     void searchesMunicipalitiesThroughTheHttpApi() throws Exception {
@@ -91,24 +111,4 @@ class WeatherApiIntegrationTest {
         return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    @TestConfiguration
-    static class StubProviders {
-        @Bean
-        @Primary
-        MunicipalityCatalog municipalityCatalog() {
-            return () -> List.of(new Municipality("28079", "Madrid", "Madrid"));
-        }
-
-        @Bean
-        @Primary
-        WeatherForecastProvider weatherForecastProvider() {
-            return (municipalityId, date) -> new DailyForecast(
-                    new BigDecimal("20.0"),
-                    List.of(
-                            new PrecipitationProbability(5, "00-06"),
-                            new PrecipitationProbability(10, "06-12"),
-                            new PrecipitationProbability(10, "12-18"),
-                            new PrecipitationProbability(5, "18-24")));
-        }
-    }
 }
